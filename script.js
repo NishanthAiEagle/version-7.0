@@ -1,4 +1,6 @@
-/* script.js — Full file (camera-init + earring placement + robust gallery close) */
+/* script.js — Full file (camera-init + earring placement + robust gallery close)
+   UPDATED: stopAutoTry() opens gallery with screenshots taken so far when user clicks Stop.
+*/
 
 /* DOM refs */
 const videoElement   = document.getElementById('webcam');
@@ -425,11 +427,16 @@ function closeSnapshotModal() { const m = document.getElementById('snapshot-moda
 /* Try-all & gallery (keeps same behaviour) */
 let autoTryRunning = false, autoTryTimeout = null, autoTryIndex = 0, autoSnapshots = [];
 function stopAutoTry(){
+  // Stop running
   autoTryRunning = false;
   if (autoTryTimeout) clearTimeout(autoTryTimeout);
   autoTryTimeout = null;
   try { tryAllBtn.classList.remove('active'); tryAllBtn.textContent = 'Try All'; } catch(e){}
-  // don't auto-open gallery here; caller will open if needed
+
+  // NEW: if there are snapshots captured so far, open the gallery so user can see how many were taken
+  if (autoSnapshots && autoSnapshots.length) {
+    openGallery();
+  }
 }
 function toggleTryAll(){ if (autoTryRunning) stopAutoTry(); else startAutoTry(); }
 

@@ -1,4 +1,4 @@
-/* script.js — Updated: improved ear placement (outward & lower) + face-shape tuning */
+/* script.js — Updated: explicit getUserMedia before Mediapipe Camera, plus all jewelry logic */
 
 /* DOM refs */
 const videoElement   = document.getElementById('webcam');
@@ -12,17 +12,33 @@ const galleryMain    = document.getElementById('gallery-main');
 const galleryThumbs  = document.getElementById('gallery-thumbs');
 const galleryClose   = document.getElementById('gallery-close');
 
-const earSizeRange   = document.getElementById('earSizeRange');
-const earSizeVal     = document.getElementById('earSizeVal');
-const neckYRange     = document.getElementById('neckYRange');
-const neckYVal       = document.getElementById('neckYVal');
-const neckScaleRange = document.getElementById('neckScaleRange');
-const neckScaleVal   = document.getElementById('neckScaleVal');
-const posSmoothRange = document.getElementById('posSmoothRange');
-const posSmoothVal   = document.getElementById('posSmoothVal');
-const earSmoothRange = document.getElementById('earSmoothRange');
-const earSmoothVal   = document.getElementById('earSmoothVal');
-const debugToggle    = document.getElementById('debugToggle');
+let earSizeRange   = document.getElementById('earSizeRange');
+let earSizeVal     = document.getElementById('earSizeVal');
+let neckYRange     = document.getElementById('neckYRange');
+let neckYVal       = document.getElementById('neckYVal');
+let neckScaleRange = document.getElementById('neckScaleRange');
+let neckScaleVal   = document.getElementById('neckScaleVal');
+let posSmoothRange = document.getElementById('posSmoothRange');
+let posSmoothVal   = document.getElementById('posSmoothVal');
+let earSmoothRange = document.getElementById('earSmoothRange');
+let earSmoothVal   = document.getElementById('earSmoothVal');
+let debugToggle    = document.getElementById('debugToggle');
+
+/* If tuning panel removed, add default fallback values */
+if (!earSizeRange) {
+  // create dummy elements to prevent runtime errors (they won't be visible)
+  earSizeRange = document.createElement('input'); earSizeRange.value = '0.24';
+  earSizeVal = { textContent: '0.24' };
+  neckYRange = document.createElement('input'); neckYRange.value = '0.60';
+  neckYVal = { textContent: '0.60' };
+  neckScaleRange = document.createElement('input'); neckScaleRange.value = '1.15';
+  neckScaleVal = { textContent: '1.15' };
+  posSmoothRange = document.createElement('input'); posSmoothRange.value = '0.88';
+  posSmoothVal = { textContent: '0.88' };
+  earSmoothRange = document.createElement('input'); earSmoothRange.value = '0.90';
+  earSmoothVal = { textContent: '0.90' };
+  debugToggle = document.createElement('div'); debugToggle.classList.remove && debugToggle.classList.remove('on');
+}
 
 /* State & assets */
 let earringImg = null, necklaceImg = null;
@@ -95,11 +111,63 @@ async function runBodyPixIfNeeded(){
   }
 }
 
-/* Setup Mediapipe FaceMesh */
+/* ---------- FACE MESH SETUP (but we start camera after getUserMedia) ---------- */
 const faceMesh = new FaceMesh({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
 faceMesh.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
+faceMesh.onResults(onFaceMeshResults);
 
-faceMesh.onResults(async (results) => {
+/* Start process: request camera permission explicitly, then create Camera helper */
+async function initCameraAndModels() {
+  try {
+    // explicit permission + stream request
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 }, audio: false });
+    videoElement.srcObject = stream;
+    videoElement.muted = true;
+    videoElement.playsInline = true;
+
+    // show raw video briefly (helps debug & ensures frames exist)
+    videoElement.style.display = 'block';
+    videoElement.style.position = 'fixed';
+    videoElement.style.top = '12px';
+    videoElement.style.left = '12px';
+    videoElement.style.width = '320px';
+    videoElement.style.zIndex = '99999';
+
+    await videoElement.play();
+
+    // now start faceMesh processing using Mediapipe Camera helper (safe after stream)
+    const cameraHelper = new Camera(videoElement, {
+      onFrame: async () => { await faceMesh.send({ image: videoElement }); },
+      width: 1280,
+      height: 720
+    });
+    cameraHelper.start();
+
+    // hide the raw video now that canvas will show the feed
+    videoElement.style.display = 'none';
+
+    // load BodyPix in background
+    ensureBodyPixLoaded();
+
+    console.log('✅ Camera stream started and FaceMesh helper initialized.');
+  } catch (err) {
+    console.error('Camera init error:', err);
+    // Provide friendly prompt if permission denied or device missing
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      alert('Please allow camera access for this site (click the camera icon in your browser URL bar).');
+    } else if (err.name === 'NotFoundError') {
+      alert('No camera found. Please connect a camera and try again.');
+    } else {
+      alert('Camera initialization failed: ' + (err && err.message ? err.message : err));
+    }
+  }
+}
+
+/* call init on load */
+initCameraAndModels();
+
+/* FaceMesh results handler */
+async function onFaceMeshResults(results) {
   // Resize canvas to match video
   if (videoElement.videoWidth && videoElement.videoHeight) {
     canvasElement.width = videoElement.videoWidth;
@@ -196,17 +264,10 @@ faceMesh.onResults(async (results) => {
   }
 
   // debug markers if toggled
-  if (debugToggle.classList.contains('on')) drawDebugMarkers();
-});
+  if (debugToggle.classList && debugToggle.classList.contains('on')) drawDebugMarkers();
+}
 
-/* Start camera via MediaPipe Camera helper */
-const camera = new Camera(videoElement, {
-  onFrame: async () => { await faceMesh.send({ image: videoElement }); },
-  width: 1280, height: 720
-});
-camera.start();
-
-/* Core: draw jewelry with shape-aware offsets (updated adj values) */
+/* Core: draw jewelry with shape-aware offsets (xAdj and lowered y) */
 function drawJewelrySmart(state, ctx, landmarks, meta) {
   const leftEar = state.leftEar, rightEar = state.rightEar, neckPoint = state.neckPoint;
   const earDist = state.earDist || Math.hypot(rightEar.x - leftEar.x, rightEar.y - leftEar.y);
@@ -214,7 +275,7 @@ function drawJewelrySmart(state, ctx, landmarks, meta) {
   const faceShape = meta.faceShape;
   const faceW = meta.faceWidth, faceH = meta.faceHeight;
 
-  // shape-based adjustments (increase xAdj and lower Y - updated per your feedback)
+  // shape-based adjustments (increase xAdj and lower Y)
   let xAdjPx = 0, yAdjPx = 0, sizeMult = 1.0;
   if (faceShape === 'round') {
     xAdjPx = Math.round(faceW * 0.06);   // increased outward push for round faces
@@ -351,8 +412,8 @@ async function takeSnapshot() {
   else drawWatermark(ctx);
 
   lastSnapshotDataURL = snap.toDataURL('image/png');
-  document.getElementById('snapshot-preview').src = lastSnapshotDataURL;
-  document.getElementById('snapshot-modal').style.display = 'block';
+  const preview = document.getElementById('snapshot-preview');
+  if (preview) { preview.src = lastSnapshotDataURL; document.getElementById('snapshot-modal').style.display = 'block'; }
 }
 function saveSnapshot() { const a = document.createElement('a'); a.href = lastSnapshotDataURL; a.download = `jewelry-${Date.now()}.png`; a.click(); }
 async function shareSnapshot() {
@@ -360,7 +421,7 @@ async function shareSnapshot() {
   const blob = await (await fetch(lastSnapshotDataURL)).blob();
   const file = new File([blob], 'look.png', { type: 'image/png' }); await navigator.share({ files: [file] });
 }
-function closeSnapshotModal() { document.getElementById('snapshot-modal').style.display = 'none'; }
+function closeSnapshotModal() { const m = document.getElementById('snapshot-modal'); if (m) m.style.display = 'none'; }
 
 /* Try-all & gallery (keeps same behaviour) */
 let autoTryRunning = false, autoTryTimeout = null, autoTryIndex = 0, autoSnapshots = [];
@@ -408,14 +469,15 @@ function openGallery(){
     galleryThumbs.appendChild(img);
   });
   if (autoSnapshots.length) setGalleryMain(0);
-  galleryModal.style.display = 'flex';
+  const gm = document.getElementById('gallery-modal');
+  if (gm) gm.style.display = 'flex';
 }
 function setGalleryMain(i){
   galleryMain.src = autoSnapshots[i];
   const thumbs = galleryThumbs.querySelectorAll('img');
   thumbs.forEach((t,idx) => t.classList.toggle('active', idx === i));
 }
-galleryClose && galleryClose.addEventListener('click', ()=> { galleryModal.style.display = 'none'; });
+if (galleryClose) galleryClose.addEventListener('click', ()=> { const gm = document.getElementById('gallery-modal'); if (gm) gm.style.display = 'none'; });
 
 async function downloadAllImages(){
   if (!autoSnapshots.length) return;
@@ -436,15 +498,16 @@ async function shareCurrentFromGallery(){
 
 /* Asset UI: categories & thumbnails */
 function toggleCategory(category){
-  document.getElementById('subcategory-buttons').style.display = 'flex';
+  const subPanel = document.getElementById('subcategory-buttons');
+  if (subPanel) subPanel.style.display = 'flex';
   const subs = document.querySelectorAll('#subcategory-buttons button');
   subs.forEach(b => b.style.display = b.innerText.toLowerCase().includes(category) ? 'inline-block' : 'none');
-  document.getElementById('jewelry-options').style.display = 'none';
+  const jopt = document.getElementById('jewelry-options'); if (jopt) jopt.style.display = 'none';
   stopAutoTry();
 }
 function selectJewelryType(type){
   currentType = type;
-  document.getElementById('jewelry-options').style.display = 'flex';
+  const jopt = document.getElementById('jewelry-options'); if (jopt) jopt.style.display = 'flex';
   earringImg = null; necklaceImg = null;
   const { start, end } = getRangeForType(type);
   insertJewelryOptions(type, 'jewelry-options', start, end);
@@ -466,6 +529,7 @@ function buildImageList(type){
 }
 function insertJewelryOptions(type, containerId, startIndex, endIndex) {
   const container = document.getElementById(containerId);
+  if (!container) return;
   container.innerHTML = '';
   for (let i = startIndex; i <= endIndex; i++){
     const src = `${type}/${type}${i}.png`;
@@ -485,7 +549,7 @@ async function changeNecklace(src){ necklaceImg = await loadImage(src); }
 function ensureWatermarkLoaded(){ return new Promise(res => { if (watermarkImg.complete && watermarkImg.naturalWidth) res(); else { watermarkImg.onload = () => res(); watermarkImg.onerror = () => res(); } }); }
 
 /* info modal toggle */
-function toggleInfoModal(){ const m = document.getElementById('info-modal'); m.style.display = (m.style.display === 'block') ? 'none' : 'block'; }
+function toggleInfoModal(){ const m = document.getElementById('info-modal'); if (m) m.style.display = (m.style.display === 'block') ? 'none' : 'block'; }
 
 /* debug draw */
 function drawDebugMarkers(){
@@ -498,14 +562,14 @@ function drawDebugMarkers(){
   ctx.restore();
 }
 
-/* slider bindings */
-earSizeRange.addEventListener('input', () => { EAR_SIZE_FACTOR = parseFloat(earSizeRange.value); earSizeVal.textContent = EAR_SIZE_FACTOR.toFixed(2); });
-neckYRange.addEventListener('input', () => { NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value); neckYVal.textContent = NECK_Y_OFFSET_FACTOR.toFixed(2); });
-neckScaleRange.addEventListener('input', () => { NECK_SCALE_MULTIPLIER = parseFloat(neckScaleRange.value); neckScaleVal.textContent = NECK_SCALE_MULTIPLIER.toFixed(2); });
-posSmoothRange.addEventListener('input', () => { POS_SMOOTH = parseFloat(posSmoothRange.value); posSmoothVal.textContent = POS_SMOOTH.toFixed(2); });
-earSmoothRange.addEventListener('input', () => { EAR_DIST_SMOOTH = parseFloat(earSmoothRange.value); earSmoothVal.textContent = EAR_DIST_SMOOTH.toFixed(2); });
+/* slider bindings (if present) */
+if (earSizeRange.addEventListener) earSizeRange.addEventListener('input', () => { EAR_SIZE_FACTOR = parseFloat(earSizeRange.value); if (earSizeVal) earSizeVal.textContent = EAR_SIZE_FACTOR.toFixed(2); });
+if (neckYRange.addEventListener) neckYRange.addEventListener('input', () => { NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value); if (neckYVal) neckYVal.textContent = NECK_Y_OFFSET_FACTOR.toFixed(2); });
+if (neckScaleRange.addEventListener) neckScaleRange.addEventListener('input', () => { NECK_SCALE_MULTIPLIER = parseFloat(neckScaleRange.value); if (neckScaleVal) neckScaleVal.textContent = NECK_SCALE_MULTIPLIER.toFixed(2); });
+if (posSmoothRange.addEventListener) posSmoothRange.addEventListener('input', () => { POS_SMOOTH = parseFloat(posSmoothRange.value); if (posSmoothVal) posSmoothVal.textContent = POS_SMOOTH.toFixed(2); });
+if (earSmoothRange.addEventListener) earSmoothRange.addEventListener('input', () => { EAR_DIST_SMOOTH = parseFloat(earSmoothRange.value); if (earSmoothVal) earSmoothVal.textContent = EAR_DIST_SMOOTH.toFixed(2); });
 
-debugToggle.addEventListener('click', () => debugToggle.classList.toggle('on') );
+if (debugToggle.addEventListener) debugToggle.addEventListener('click', () => debugToggle.classList.toggle('on') );
 
 /* start BodyPix load early */
 ensureBodyPixLoaded();

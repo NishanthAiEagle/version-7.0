@@ -24,7 +24,9 @@
     <div id="logo"><img src="logo.png" alt="Brand" /></div>
 
     <div id="video-container">
-      <video id="webcam" autoplay playsinline muted></video>
+      <!-- raw video (hidden by default) -->
+      <video id="webcam" autoplay playsinline muted style="display:none;"></video>
+      <!-- canvas overlay where everything is drawn -->
       <canvas id="overlay"></canvas>
     </div>
 
@@ -61,7 +63,6 @@
       <ul>
         <li>Allow camera access.</li>
         <li>Choose category → pick a design.</li>
-        <li>Open Live Tuning to adjust earring size & smoothing.</li>
         <li>Try All to auto-capture looks; press Stop to view gallery.</li>
       </ul>
       <button class="close-btn" onclick="toggleInfoModal()">Got it</button>
@@ -93,7 +94,8 @@
     </div>
   </div>
 
- 
+  <!-- keep tuning panel in DOM if you want to remove later; comment or delete if you removed it earlier -->
+  <!-- (If you already deleted it, ignore) -->
 
   <script src="script.js"></script>
 </body>

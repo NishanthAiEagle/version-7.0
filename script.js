@@ -30,8 +30,8 @@ let debugToggle    = document.getElementById('debugToggle');
 if (!earSizeRange) {
   earSizeRange = document.createElement('input'); earSizeRange.value = '0.24';
   earSizeVal = { textContent: '0.24' };
-  neckYRange = document.createElement('input'); neckYRange.value = '0.60';
-  neckYVal = { textContent: '0.60' };
+  neckYRange = document.createElement('input'); neckYRange.value = '0.95';
+  neckYVal = { textContent: '0.95' };
   neckScaleRange = document.createElement('input'); neckScaleRange.value = '1.15';
   neckScaleVal = { textContent: '1.15' };
   posSmoothRange = document.createElement('input'); posSmoothRange.value = '0.88';
@@ -52,7 +52,7 @@ let lastSnapshotDataURL = '';
 
 /* Tunables (initial values match UI defaults) */
 let EAR_SIZE_FACTOR = parseFloat(earSizeRange.value || 0.24);
-let NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value || 0.60);
+let NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value || 0.95);
 let NECK_SCALE_MULTIPLIER = parseFloat(neckScaleRange.value || 1.15);
 let POS_SMOOTH = parseFloat(posSmoothRange.value || 0.88);
 let EAR_DIST_SMOOTH = parseFloat(earSmoothRange.value || 0.90);

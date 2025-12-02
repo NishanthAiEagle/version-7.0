@@ -1,4 +1,4 @@
-/* script.js — Updated: explicit getUserMedia before Mediapipe Camera, plus all jewelry logic */
+/* script.js — Full file (camera-init + earring placement + robust gallery close) */
 
 /* DOM refs */
 const videoElement   = document.getElementById('webcam');
@@ -24,20 +24,19 @@ let earSmoothRange = document.getElementById('earSmoothRange');
 let earSmoothVal   = document.getElementById('earSmoothVal');
 let debugToggle    = document.getElementById('debugToggle');
 
-/* If tuning panel removed, add default fallback values */
+/* If tuning panel elements removed from DOM, create safe fallbacks to avoid runtime errors */
 if (!earSizeRange) {
-  // create dummy elements to prevent runtime errors (they won't be visible)
   earSizeRange = document.createElement('input'); earSizeRange.value = '0.24';
   earSizeVal = { textContent: '0.24' };
-  neckYRange = document.createElement('input'); neckYRange.value = '0.95';
-  neckYVal = { textContent: '0.95' };
+  neckYRange = document.createElement('input'); neckYRange.value = '0.60';
+  neckYVal = { textContent: '0.60' };
   neckScaleRange = document.createElement('input'); neckScaleRange.value = '1.15';
   neckScaleVal = { textContent: '1.15' };
   posSmoothRange = document.createElement('input'); posSmoothRange.value = '0.88';
   posSmoothVal = { textContent: '0.88' };
   earSmoothRange = document.createElement('input'); earSmoothRange.value = '0.90';
   earSmoothVal = { textContent: '0.90' };
-  debugToggle = document.createElement('div'); debugToggle.classList.remove && debugToggle.classList.remove('on');
+  debugToggle = document.createElement('div');
 }
 
 /* State & assets */
@@ -51,7 +50,7 @@ let lastSnapshotDataURL = '';
 
 /* Tunables (initial values match UI defaults) */
 let EAR_SIZE_FACTOR = parseFloat(earSizeRange.value || 0.24);
-let NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value || 0.95);
+let NECK_Y_OFFSET_FACTOR = parseFloat(neckYRange.value || 0.60);
 let NECK_SCALE_MULTIPLIER = parseFloat(neckScaleRange.value || 1.15);
 let POS_SMOOTH = parseFloat(posSmoothRange.value || 0.88);
 let EAR_DIST_SMOOTH = parseFloat(earSmoothRange.value || 0.90);
@@ -125,7 +124,7 @@ async function initCameraAndModels() {
     videoElement.muted = true;
     videoElement.playsInline = true;
 
-    // show raw video briefly (helps debug & ensures frames exist)
+    // show raw video briefly (helps ensure frames exist)
     videoElement.style.display = 'block';
     videoElement.style.position = 'fixed';
     videoElement.style.top = '12px';
@@ -397,7 +396,7 @@ function compositeHeadOcclusion(mainCtx, landmarks, seg) {
 }
 
 /* Snapshot helpers */
-function triggerFlash() { flashOverlay.classList.add('active'); setTimeout(()=>flashOverlay.classList.remove('active'), 180); }
+function triggerFlash() { if (flashOverlay) { flashOverlay.classList.add('active'); setTimeout(()=>flashOverlay.classList.remove('active'), 180); } }
 
 async function takeSnapshot() {
   if (!smoothedLandmarks) { alert('Face not detected'); return; }
@@ -413,9 +412,9 @@ async function takeSnapshot() {
 
   lastSnapshotDataURL = snap.toDataURL('image/png');
   const preview = document.getElementById('snapshot-preview');
-  if (preview) { preview.src = lastSnapshotDataURL; document.getElementById('snapshot-modal').style.display = 'block'; }
+  if (preview) { preview.src = lastSnapshotDataURL; const m = document.getElementById('snapshot-modal'); if (m) m.style.display = 'block'; }
 }
-function saveSnapshot() { const a = document.createElement('a'); a.href = lastSnapshotDataURL; a.download = `jewelry-${Date.now()}.png`; a.click(); }
+function saveSnapshot() { if (!lastSnapshotDataURL) return; const a = document.createElement('a'); a.href = lastSnapshotDataURL; a.download = `jewelry-${Date.now()}.png`; a.click(); }
 async function shareSnapshot() {
   if (!navigator.share) { alert('Sharing not supported'); return; }
   const blob = await (await fetch(lastSnapshotDataURL)).blob();
@@ -429,9 +428,8 @@ function stopAutoTry(){
   autoTryRunning = false;
   if (autoTryTimeout) clearTimeout(autoTryTimeout);
   autoTryTimeout = null;
-  tryAllBtn.classList.remove('active');
-  tryAllBtn.textContent = 'Try All';
-  if (autoSnapshots.length > 0) openGallery();
+  try { tryAllBtn.classList.remove('active'); tryAllBtn.textContent = 'Try All'; } catch(e){}
+  // don't auto-open gallery here; caller will open if needed
 }
 function toggleTryAll(){ if (autoTryRunning) stopAutoTry(); else startAutoTry(); }
 
@@ -439,7 +437,7 @@ async function startAutoTry(){
   if (!currentType) { alert('Choose a category first'); return; }
   const list = buildImageList(currentType); if (!list.length) { alert('No items'); return; }
   autoSnapshots = []; autoTryIndex = 0; autoTryRunning = true;
-  tryAllBtn.classList.add('active'); tryAllBtn.textContent = 'Stop';
+  try { tryAllBtn.classList.add('active'); tryAllBtn.textContent = 'Stop'; } catch(e){}
   const step = async () => {
     if (!autoTryRunning) return;
     const src = list[autoTryIndex];
@@ -455,30 +453,72 @@ async function startAutoTry(){
       autoSnapshots.push(snap.toDataURL('image/png'));
     }
     autoTryIndex++;
-    if (autoTryIndex >= list.length) { stopAutoTry(); return; }
+    if (autoTryIndex >= list.length) {
+      // finished sequence: open gallery if we captured anything
+      autoTryRunning = false;
+      try { tryAllBtn.classList.remove('active'); tryAllBtn.textContent = 'Try All'; } catch(e){}
+      if (autoSnapshots.length) openGallery();
+      return;
+    }
     autoTryTimeout = setTimeout(step, 2000);
   };
   step();
 }
 
+/* Safer openGallery: only open if snapshots exist */
 function openGallery(){
+  if (!autoSnapshots || !autoSnapshots.length) return;
+  if (!galleryThumbs) return;
   galleryThumbs.innerHTML = '';
   autoSnapshots.forEach((src,i) => {
     const img = document.createElement('img'); img.src = src;
     img.onclick = () => setGalleryMain(i);
     galleryThumbs.appendChild(img);
   });
-  if (autoSnapshots.length) setGalleryMain(0);
+  setGalleryMain(0);
   const gm = document.getElementById('gallery-modal');
   if (gm) gm.style.display = 'flex';
+  // lock page scroll while gallery is open
+  document.body.style.overflow = 'hidden';
 }
 function setGalleryMain(i){
+  if (!galleryMain) return;
   galleryMain.src = autoSnapshots[i];
   const thumbs = galleryThumbs.querySelectorAll('img');
   thumbs.forEach((t,idx) => t.classList.toggle('active', idx === i));
 }
-if (galleryClose) galleryClose.addEventListener('click', ()=> { const gm = document.getElementById('gallery-modal'); if (gm) gm.style.display = 'none'; });
 
+/* ---- Robust gallery close / cleanup ---- */
+function closeGalleryClean() {
+  try {
+    // stop any ongoing Try-All
+    if (typeof stopAutoTry === 'function') stopAutoTry();
+  } catch(e){ /* ignore */ }
+
+  // clear snapshot buffer so it won't auto-open later
+  autoSnapshots = [];
+
+  // fully hide the modal and restore interactions/scroll
+  const gm = document.getElementById('gallery-modal');
+  if (gm) {
+    gm.style.display = 'none';
+    gm.style.pointerEvents = 'auto';
+  }
+
+  document.body.style.overflow = '';
+  // refocus page
+  try { window.focus(); } catch(e){}
+}
+
+/* wire the new cleaner close handler */
+const galleryCloseBtn = document.getElementById('gallery-close');
+if (galleryCloseBtn) {
+  // remove previous handlers if any
+  try { galleryCloseBtn.removeEventListener && galleryCloseBtn.removeEventListener('click', closeGalleryClean); } catch(e){}
+  galleryCloseBtn.addEventListener('click', closeGalleryClean);
+}
+
+/* download / share helpers */
 async function downloadAllImages(){
   if (!autoSnapshots.length) return;
   const zip = new JSZip(), f = zip.folder('Looks');
@@ -503,6 +543,7 @@ function toggleCategory(category){
   const subs = document.querySelectorAll('#subcategory-buttons button');
   subs.forEach(b => b.style.display = b.innerText.toLowerCase().includes(category) ? 'inline-block' : 'none');
   const jopt = document.getElementById('jewelry-options'); if (jopt) jopt.style.display = 'none';
+  // ensure TryAll is stopped when switching
   stopAutoTry();
 }
 function selectJewelryType(type){

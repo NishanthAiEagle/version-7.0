@@ -1,89 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Overlay Jewels Try-On</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Overlay Jewels — Auto Face-Shape Adjustment</title>
+
   <link rel="stylesheet" href="style.css" />
 
-  <!-- JS libraries: Mediapipe (face mesh), TFJS, BodyPix -->
+  <!-- Mediapipe FaceMesh -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-  <!-- Add TFJS + BodyPix BEFORE your script.js -->
+  <!-- TensorFlow + BodyPix -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0.5/dist/body-pix.min.js"></script>
+
+  <!-- JSZip + FileSaver (gallery download) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
-  <!-- Main container -->
   <div id="app">
-    <!-- Logo -->
-    <div id="logo">
-      <img src="logo.png" alt="Brand Logo" />
-    </div>
+    <div id="logo"><img src="logo.png" alt="Brand" /></div>
 
-    <!-- Video + Canvas -->
     <div id="video-container">
-      <!-- video is used as source only; canvas displays everything -->
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
     </div>
 
-    <!-- Jewelry Category Buttons -->
     <div id="jewelry-mode">
       <button onclick="toggleCategory('gold')">Gold</button>
       <button onclick="toggleCategory('diamond')">Diamond</button>
       <button id="tryall-btn" onclick="toggleTryAll()">Try All</button>
     </div>
 
-    <!-- Subcategory Buttons -->
-    <div id="subcategory-buttons" style="display: none;">
+    <div id="subcategory-buttons" style="display:none;">
       <button onclick="selectJewelryType('gold_earrings')">Gold Earrings</button>
       <button onclick="selectJewelryType('gold_necklaces')">Gold Necklaces</button>
       <button onclick="selectJewelryType('diamond_earrings')">Diamond Earrings</button>
       <button onclick="selectJewelryType('diamond_necklaces')">Diamond Necklaces</button>
     </div>
 
-    <!-- Jewelry Thumbnails -->
-    <div id="jewelry-options" class="options-group" style="display: none;"></div>
+    <div id="jewelry-options" style="display:none;"></div>
 
-    <!-- Snapshot Button (single photo) -->
     <button id="snapshot-btn" onclick="takeSnapshot()">
       <img src="camera-icon.png" alt="Snapshot" />
     </button>
 
-    <!-- Info Button -->
     <button id="info-btn" onclick="toggleInfoModal()">ℹ️</button>
 
-    <!-- Location Button -->
-    <a id="location-btn"
-       href="https://www.google.com/maps/place/50,+VP+St,+Vannarpet,+Coonoor,+Tamil+Nadu+643101"
-       target="_blank" rel="noopener noreferrer">
-      <img src="location_icon.png" alt="Location Icon" style="width: 40px; height: 40px;" />
+    <a id="location-btn" href="#" target="_blank" rel="noopener noreferrer">
+      <img src="location_icon.png" alt="Location" />
     </a>
   </div>
 
-  <!-- Info Modal -->
+  <!-- Info modal -->
   <div id="info-modal">
-    <h3>How to Use the Try-On App</h3>
+    <h3>How to use</h3>
     <div class="info-content">
       <ul>
-        <li>Allow camera access when prompted.</li>
-        <li>Select Gold / Diamond and choose earrings or chains.</li>
-        <li>Tap a design to see it live on your face.</li>
-        <li>Use the camera icon for a single photo.</li>
-        <li>Use “Try All” to auto-change and auto-capture looks.</li>
+        <li>Allow camera access.</li>
+        <li>Choose category → pick a design.</li>
+        <li>Open Live Tuning to adjust earring size & smoothing.</li>
+        <li>Try All to auto-capture looks; press Stop to view gallery.</li>
       </ul>
-      <button class="close-btn" onclick="toggleInfoModal()">Got it!</button>
+      <button class="close-btn" onclick="toggleInfoModal()">Got it</button>
     </div>
   </div>
 
-  <!-- FLASH overlay for photo effect -->
   <div id="flash-overlay"></div>
 
-  <!-- Snapshot Modal (single capture) -->
   <div id="snapshot-modal">
-    <img id="snapshot-preview" alt="Snapshot preview" />
+    <img id="snapshot-preview" alt="Snapshot" />
     <div class="snapshot-buttons">
       <button onclick="saveSnapshot()">Download</button>
       <button onclick="shareSnapshot()">Share</button>
@@ -91,36 +79,72 @@
     </div>
   </div>
 
-  <!-- GALLERY MODAL -->
-<div id="gallery-modal">
-  <div class="gallery-content">
-
-    <button id="gallery-close">×</button>
-
-    <!-- Layout with big image + side slider -->
-    <div id="gallery-layout">
-      <img id="gallery-main" />
-
-      <div id="gallery-side-slider">
-        <div id="gallery-thumbs"></div>
+  <div id="gallery-modal">
+    <div class="gallery-content">
+      <button id="gallery-close">×</button>
+      <div id="gallery-layout">
+        <img id="gallery-main" alt="Look" />
+        <div id="gallery-side-slider"><div id="gallery-thumbs"></div></div>
+      </div>
+      <div class="gallery-buttons">
+        <button onclick="downloadAllImages()">Download All</button>
+        <button onclick="shareCurrentFromGallery()">Share</button>
       </div>
     </div>
+  </div>
 
-    <!-- Buttons below gallery -->
-    <div class="gallery-buttons">
-      <button onclick="downloadAllImages()">Download All</button>
-      <button onclick="shareCurrentFromGallery()">Share</button>
+  <!-- Tuning panel -->
+  <div id="tuning-panel">
+    <h4>Live Tuning</h4>
+
+    <div class="tune-row">
+      <div class="tune-label">
+        <span>Earring Size</span>
+        <span class="tune-value" id="earSizeVal">0.24</span>
+      </div>
+      <input id="earSizeRange" type="range" min="0.14" max="0.40" step="0.01" value="0.24"/>
     </div>
 
+    <div class="tune-row">
+      <div class="tune-label">
+        <span>Neck Y offset</span>
+        <span class="tune-value" id="neckYVal">0.60</span>
+      </div>
+      <input id="neckYRange" type="range" min="0.2" max="1.0" step="0.01" value="0.60"/>
+    </div>
+
+    <div class="tune-row">
+      <div class="tune-label">
+        <span>Neck Scale</span>
+        <span class="tune-value" id="neckScaleVal">1.15</span>
+      </div>
+      <input id="neckScaleRange" type="range" min="0.8" max="1.4" step="0.01" value="1.15"/>
+    </div>
+
+    <div class="tune-row">
+      <div class="tune-label">
+        <span>Pos Smooth</span>
+        <span class="tune-value" id="posSmoothVal">0.88</span>
+      </div>
+      <input id="posSmoothRange" type="range" min="0.6" max="0.98" step="0.01" value="0.88"/>
+    </div>
+
+    <div class="tune-row">
+      <div class="tune-label">
+        <span>EarDist Smooth</span>
+        <span class="tune-value" id="earSmoothVal">0.90</span>
+      </div>
+      <input id="earSmoothRange" type="range" min="0.7" max="0.99" step="0.01" value="0.90"/>
+    </div>
+
+    <div class="toggle-row">
+      <div>Show Debug</div>
+      <div id="debugToggle" class="toggle"><div class="knob"></div></div>
+    </div>
+
+    <div class="tuning-help">Tip: slide <strong>Earring Size</strong> while facing the camera.</div>
   </div>
-</div>
 
-
-  <!-- JSZip + FileSaver for ZIP download -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
-  <!-- main app script (after libraries) -->
   <script src="script.js"></script>
 </body>
 </html>

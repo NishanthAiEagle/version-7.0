@@ -3,99 +3,112 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Overlay Jewels — Auto Face-Shape Adjustment</title>
-
+  <title>JEWELS-AI</title>
+  
   <link rel="stylesheet" href="style.css" />
 
-  <!-- Mediapipe FaceMesh -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-  <!-- TensorFlow + BodyPix -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0.5/dist/body-pix.min.js"></script>
-
-  <!-- JSZip + FileSaver (gallery download) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
   <div id="app">
-    <div id="logo"><img src="logo.png" alt="Brand" /></div>
-
     <div id="video-container">
-      <!-- raw video (hidden by default) -->
-      <video id="webcam" autoplay playsinline muted style="display:none;"></video>
-      <!-- canvas overlay where everything is drawn -->
+      <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
     </div>
 
-    <div id="jewelry-mode">
-      <button onclick="toggleCategory('gold')">Gold</button>
-      <button onclick="toggleCategory('diamond')">Diamond</button>
-      <button id="tryall-btn" onclick="toggleTryAll()">Try All</button>
+    <div id="loading-status">Starting Camera...</div>
+
+    <div id="gesture-indicator">
+      <div id="indicator-dot"></div>
+      <span id="indicator-text">Show Hand to Control</span>
     </div>
 
-    <div id="subcategory-buttons" style="display:none;">
-      <button onclick="selectJewelryType('gold_earrings')">Gold Earrings</button>
-      <button onclick="selectJewelryType('gold_necklaces')">Gold Necklaces</button>
-      <button onclick="selectJewelryType('diamond_earrings')">Diamond Earrings</button>
-      <button onclick="selectJewelryType('diamond_necklaces')">Diamond Necklaces</button>
-    </div>
-
-    <div id="jewelry-options" style="display:none;"></div>
-
-    <button id="snapshot-btn" onclick="takeSnapshot()">
-      <img src="camera-icon.png" alt="Snapshot" />
-    </button>
-
-    <button id="info-btn" onclick="toggleInfoModal()">ℹ️</button>
-
-    <a id="location-btn" href="#" target="_blank" rel="noopener noreferrer">
-      <img src="location_icon.png" alt="Location" />
-    </a>
-  </div>
-
-  <!-- Info modal -->
-  <div id="info-modal">
-    <h3>How to use</h3>
-    <div class="info-content">
-      <ul>
-        <li>Allow camera access.</li>
-        <li>Choose category → pick a design.</li>
-        <li>Try All to auto-capture looks; press Stop to view gallery.</li>
-      </ul>
-      <button class="close-btn" onclick="toggleInfoModal()">Got it</button>
-    </div>
-  </div>
-
-  <div id="flash-overlay"></div>
-
-  <div id="snapshot-modal">
-    <img id="snapshot-preview" alt="Snapshot" />
-    <div class="snapshot-buttons">
-      <button onclick="saveSnapshot()">Download</button>
-      <button onclick="shareSnapshot()">Share</button>
-      <button onclick="closeSnapshotModal()">Close</button>
-    </div>
-  </div>
-
-  <div id="gallery-modal">
-    <div class="gallery-content">
-      <button id="gallery-close">×</button>
-      <div id="gallery-layout">
-        <img id="gallery-main" alt="Look" />
-        <div id="gallery-side-slider"><div id="gallery-thumbs"></div></div>
+    <header id="controls-hero">
+      <div class="brand-row">
+        <div class="brand-left">
+          <img src="logo.png" alt="Jewels-ai Logo" class="brand-logo" />
+        
+        </div>
+        <div class="action-row">
+          <button id="snapshot-btn" onclick="takeSnapshot()" title="Capture Look">
+             <span style="font-size:20px;">📷</span>
+          </button>
+        </div>
       </div>
-      <div class="gallery-buttons">
-        <button onclick="downloadAllImages()">Download All</button>
-        <button onclick="shareCurrentFromGallery()">Share</button>
+
+      <div class="controls-panel">
+        <div id="jewelry-mode" class="pill-group">
+          <button class="pill" onclick="toggleCategory('gold')">Gold</button>
+          <button class="pill" onclick="toggleCategory('diamond')">Diamond</button>
+          <button id="tryall-btn" class="pill accent" onclick="toggleTryAll()">Try All</button>
+        </div>
+
+        <div id="subcategory-buttons" class="sub-pills" style="display:none;">
+          <button onclick="selectJewelryType('gold_earrings')" class="subpill">Gold Earrings</button>
+          <button onclick="selectJewelryType('gold_necklaces')" class="subpill">Gold Necklaces</button>
+          <button onclick="selectJewelryType('diamond_earrings')" class="subpill">Diamond Earrings</button>
+          <button onclick="selectJewelryType('diamond_necklaces')" class="subpill">Diamond Necklaces</button>
+        </div>
+
+        <div id="jewelry-options" class="carousel-cards" style="display:none;"></div>
+      </div>
+    </header>
+
+    <div id="preview-modal">
+        <span class="close-preview" onclick="closePreview()">&times;</span>
+        
+        <div class="preview-container">
+            <img id="preview-image" src="" alt="Captured Look">
+        </div>
+
+        <div class="preview-actions">
+            <button class="pill accent" onclick="downloadSingleSnapshot()">
+                Download
+            </button>
+            <button class="pill" onclick="shareSingleSnapshot()">
+                Share
+            </button>
+        </div>
+    </div>
+
+    <div id="gallery-modal" role="dialog" aria-labelledby="gallery-title" aria-modal="true">
+      <div class="gallery-content">
+        <span class="close-gallery" onclick="closeGallery()" aria-label="Close Gallery">&times;</span>
+        <h2 id="gallery-title" style="font-family: 'Playfair Display'; color: #d4af37;">Your Collection</h2>
+        <div class="gallery-subtitle">Tap an image to view details</div>
+        
+        <div id="gallery-grid"></div>
+        
+        <div style="margin-top: 20px;">
+          <button class="pill accent" onclick="downloadAllAsZip()">Download ZIP</button>
+          <button class="pill" onclick="closeGallery()" style="margin-left: 10px;">Back to Camera</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- keep tuning panel in DOM if you want to remove later; comment or delete if you removed it earlier -->
-  <!-- (If you already deleted it, ignore) -->
+    <div id="lightbox-overlay">
+        <span class="close-lightbox" onclick="closeLightbox()">&times;</span>
+        <div class="lightbox-main">
+            <img id="lightbox-image" src="" alt="Zoomed View">
+        </div>
+        <div class="lightbox-strip" id="lightbox-thumbs"></div>
+    </div>
+
+    <div id="process-overlay">
+        <div class="process-box">
+            <div id="process-spinner" class="spinner"></div>
+            <div id="process-success" style="display:none; font-size: 50px;">✅</div>
+            <p id="process-text" style="margin-top:15px; font-size:18px;">Packaging Collection...</p>
+        </div>
+    </div>
+
+    <div id="flash-overlay"></div>
+  </div>
 
   <script src="script.js"></script>
 </body>

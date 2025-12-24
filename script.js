@@ -1,10 +1,23 @@
-/* script.js - Aurum Atelier: Full Features (Watermark + Text + Filename + Hide Hand) */
+/* script.js - Aurum Atelier: Any Filename Support + All Features */
 
-const IMAGE_COUNTS = {
-  gold_earrings: 5, 
-  gold_necklaces: 5,
-  diamond_earrings: 5, 
-  diamond_necklaces: 6
+/* CONFIGURATION: 
+   List your exact filenames here for each category.
+   You can use any name (e.g., "design1.png", "ruby_set.jpg").
+*/
+const JEWELRY_CONFIG = {
+  gold_earrings: [
+    "1.png", "2.png", "Fsn_ge0121.png", "4.png", "5.png"
+    // Add more here: "my_custom_design.png",
+  ],
+  gold_necklaces: [
+    "1.png", "2.png", "3.png", "4.png", "5.png"
+  ],
+  diamond_earrings: [
+    "1.png", "2.png", "3.png", "4.png", "5.png"
+  ],
+  diamond_necklaces: [
+    "1.png", "2.png", "3.png", "4.png", "5.png", "6.png"
+  ]
 };
 
 /* --- 1. PRELOAD WATERMARK --- */
@@ -20,9 +33,8 @@ const loadingStatus = document.getElementById('loading-status');
 /* --- HIDE GESTURE INDICATOR --- */
 const gestureIndicator = document.getElementById('gesture-indicator');
 if (gestureIndicator) {
-    gestureIndicator.style.display = 'none'; // Hides the "Show Hand" text
+    gestureIndicator.style.display = 'none';
 }
-// Keep these defined to prevent errors
 const indicatorDot = document.getElementById('indicator-dot');
 const indicatorText = document.getElementById('indicator-text');
 
@@ -41,34 +53,35 @@ let autoTryRunning = false;
 let autoSnapshots = [];
 let autoTryIndex = 0;
 let autoTryTimeout = null;
-// Store preview data for specific filename download
 let currentPreviewData = { url: null, name: 'aurum_look.png' }; 
 
 /* --- Asset Preloading Cache --- */
 const preloadedAssets = {};
 
+// Updated to use the Filename List
 async function preloadCategory(type) {
   if (preloadedAssets[type]) return; 
   preloadedAssets[type] = [];
-  const count = IMAGE_COUNTS[type];
   
-  for(let i=1; i<=count; i++) {
-    const src = `${type}/${i}.png`;
+  const files = JEWELRY_CONFIG[type];
+  if (!files) return;
+
+  files.forEach(filename => {
+    // Construct path: folder/filename
+    const src = `${type}/${filename}`;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = src;
     preloadedAssets[type].push(img);
-  }
+  });
 }
 
-/* --- UI Indicator Helpers (Logic kept, Visuals Hidden) --- */
+/* --- UI Indicator Helpers --- */
 function updateHandIndicator(detected) {
-  // We update state logic, even if element is hidden
   if (!detected) previousHandX = null; 
 }
 
 function flashIndicator(color) {
-    // Optional: Only flash if you decide to show the dot later
     if(indicatorDot && indicatorDot.style.display !== 'none') {
         indicatorDot.style.background = color;
         setTimeout(() => { indicatorDot.style.background = "#00ff88"; }, 300);
@@ -227,6 +240,7 @@ function navigateJewelry(dir) {
   else necklaceImg = nextItem;
 }
 
+// Updated to iterate over filenames
 function selectJewelryType(type) {
   currentType = type;
   preloadCategory(type); 
@@ -235,17 +249,23 @@ function selectJewelryType(type) {
   container.innerHTML = '';
   container.style.display = 'flex';
   
-  for(let i=1; i<=IMAGE_COUNTS[type]; i++) {
+  const files = JEWELRY_CONFIG[type];
+  if (!files) return;
+
+  // Use index to map button to asset
+  files.forEach((filename, i) => {
     const btnImg = new Image();
-    btnImg.src = `${type}/${i}.png`;
+    btnImg.src = `${type}/${filename}`;
     btnImg.className = "thumb-btn"; 
     btnImg.onclick = () => {
-        const fullImg = preloadedAssets[type][i-1];
+        // Since preloadedAssets[type] was pushed in same order as JEWELRY_CONFIG[type]
+        // we can access by index
+        const fullImg = preloadedAssets[type][i];
         if (type.includes('earrings')) earringImg = fullImg;
         else necklaceImg = fullImg;
     };
     container.appendChild(btnImg);
-  }
+  });
 }
 
 function toggleCategory(cat) {
@@ -311,7 +331,7 @@ async function runAutoStep() {
   }, 1500); 
 }
 
-/* ---------- CAPTURE + WATERMARK + TEXT + FILENAME ---------- */
+/* ---------- CAPTURE + WATERMARK + TEXT (FROM FILENAME) ---------- */
 function captureToGallery() {
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = videoElement.videoWidth;
@@ -327,7 +347,7 @@ function captureToGallery() {
   tempCtx.setTransform(1, 0, 0, 1, 0, 0); 
   tempCtx.drawImage(canvasElement, 0, 0);
 
-  // --- CALCULATE ITEM NAME & FILENAME ---
+  // --- DYNAMIC NAME GENERATION ---
   let itemName = "Aurum Look";
   let itemFilename = "aurum_look.png";
   
@@ -336,13 +356,17 @@ function captureToGallery() {
       let currentImg = currentType.includes('earrings') ? earringImg : necklaceImg;
       let idx = list.indexOf(currentImg);
       
-      if(idx >= 0) {
-          // Visual Name: e.g., "Gold Earrings #3"
-          const readableType = currentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          itemName = `${readableType} #${idx + 1}`;
+      if(idx >= 0 && JEWELRY_CONFIG[currentType][idx]) {
+          const rawFilename = JEWELRY_CONFIG[currentType][idx];
           
-          // File Name: e.g., "Aurum_Gold_Earrings_03.png"
-          itemFilename = `Aurum_${currentType}_${idx + 1}.png`;
+          // Clean up filename for display (remove extension, replace _ with space)
+          const nameOnly = rawFilename.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+          
+          // Capitalize first letters
+          itemName = nameOnly.replace(/\b\w/g, l => l.toUpperCase());
+          
+          // Create download filename
+          itemFilename = `Aurum_${rawFilename}`;
       }
   }
 
@@ -352,11 +376,11 @@ function captureToGallery() {
   tempCtx.textAlign = "left";
   tempCtx.textBaseline = "bottom";
   
-  // Text Shadow (Black Outline for visibility)
+  // Text Shadow
   tempCtx.fillStyle = "rgba(0,0,0,0.8)";
   tempCtx.fillText(itemName, padding + 2, tempCanvas.height - padding + 2);
   
-  // Text Main (White)
+  // Text Main
   tempCtx.fillStyle = "#ffffff";
   tempCtx.fillText(itemName, padding, tempCanvas.height - padding);
 
@@ -382,7 +406,6 @@ function captureToGallery() {
     setTimeout(() => flash.classList.remove('active'), 100);
   }
   
-  // Return BOTH the image data and the calculated filename
   return { url: dataUrl, name: itemFilename }; 
 }
 
@@ -393,7 +416,7 @@ function takeSnapshot() {
 
 /* ---------- SINGLE PREVIEW ---------- */
 function openSinglePreview(shotData) {
-    currentPreviewData = shotData; // Store object { url, name }
+    currentPreviewData = shotData; 
     
     const modal = document.getElementById('preview-modal');
     const img = document.getElementById('preview-image');
@@ -408,7 +431,6 @@ function closePreview() {
 
 function downloadSingleSnapshot() {
     if(currentPreviewData && currentPreviewData.url) {
-        // Use the generated specific filename
         saveAs(currentPreviewData.url, currentPreviewData.name);
     }
 }
@@ -419,7 +441,6 @@ async function shareSingleSnapshot() {
     const response = await fetch(currentPreviewData.url);
     const blob = await response.blob();
     
-    // Use the generated specific filename for sharing
     const file = new File([blob], currentPreviewData.name, { type: "image/png" });
     
     if (navigator.share) {
@@ -547,6 +568,7 @@ window.downloadAllAsZip = downloadAllAsZip;
 window.closePreview = closePreview;
 window.downloadSingleSnapshot = downloadSingleSnapshot;
 window.shareSingleSnapshot = shareSingleSnapshot;
+
 /* ===========================
    DISABLE RIGHT CLICK & DEV TOOLS
    ============================ */
